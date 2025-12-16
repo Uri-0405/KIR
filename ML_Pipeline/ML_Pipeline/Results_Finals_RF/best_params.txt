@@ -1,0 +1,1 @@
+{'class_weight': 'balanced_subsample', 'max_depth': 7, 'min_samples_leaf': 10, 'n_estimators': 100}
