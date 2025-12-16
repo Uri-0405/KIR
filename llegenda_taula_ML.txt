@@ -1,0 +1,37 @@
+Diccionari de Dades: Anàlisi de la Resposta al Tractament de 1a Línia
+
+Per a aquest estudi, la variable principal que defineix l'èxit o fracàs del pacient s'anomena ESTAT_DETALLAT. Aquesta variable no es limita a una classificació binària (Sí/No), sinó que captura la naturalesa biològica del resultat clínic per permetre una anàlisi multivariant precisa.
+
+A continuació es descriuen les categories possibles:
+1. L'Èxit Terapèutic (Remissió Profunda)
+
+Es considera un èxit quan el pacient assoleix l'estat EXIT_DMR_LINIA_1. Això significa que el pacient ha aconseguit una Remissió Molecular Profunda (DMR), definida com una reducció de la càrrega tumoral (BCR-ABL) per sota del 0.01%. El punt clau d'aquesta categoria és que l'objectiu s'ha assolit mantenint exclusivament la medicació de primera línia. Aquests pacients representen el "Gold Standard" de resposta immunològica i farmacològica, i els seus perfils genètics (KIR) es consideren els "protectors" o "eficients".
+2. El Fracàs del Tractament (Canvi de Medicació)
+
+Quan un pacient no assoleix els objectius i se li ha de retirar la medicació de primera línia, es classifica com a NO_DMR_CANVI_TRACTAMENT. Per evitar confondre causes biològiques diferents, hem desglossat aquest fracàs segons el codi clínic registrat:
+
+    Fracàs per Resistència (Causa 1): Indica que el fàrmac no ha estat capaç d'eliminar les cèl·lules leucèmiques (la malaltia progressa o no baixa). Aquest és el grup més important per al nostre estudi genètic, ja que suggereix que el sistema immune (cèl·lules NK) i el fàrmac no han pogut controlar el tumor.
+
+    Fracàs per Toxicitat o Intolerància (Causa 2): El pacient ha hagut de deixar el tractament per efectes secundaris greus (problemes hepàtics, cardíacs, cutanis), malgrat que potser la leucèmia estava responent. Aquest grup s'ha de tractar de manera diferent en els models matemàtics, ja que la causa sol ser metabòlica i no necessàriament lligada a la capacitat antitumoral dels gens KIR.
+
+    Fracàs per Mutació T315I (Causa 4): Un tipus específic de resistència on el tumor desenvolupa una mutació concreta que el fa immune al fàrmac.
+
+    Causes Electives o Altres (Causa 3): Canvis de medicació per decisió del pacient, embaràs o logística, sense relació directa amb l'eficàcia o toxicitat greu.
+
+3. Situacions Especials i Dades Censurades
+
+Hi ha pacients que no encaixen en les definicions anteriors i que requereixen un tractament estadístic especial:
+
+    Pacients Actius (NO_DMR_ACTIU): Són aquells que encara estan prenent la medicació de primera línia en el moment de tancar l'estudi, però que encara no han arribat a la remissió profunda. En estadística, això són dades censurades: sabem que han aguantat un cert nombre de dies sense empitjorar, però no sabem si es curaran en el futur.
+
+    Èxitus (NO_DMR_EXITUS): Pacients que han mort abans de poder avaluar si el tractament funcionava completament. Es consideren un risc competitiu.
+
+    Èxit fora de línia (DMR_FORA_LINIA_1): Aquest és un cas enganyós. Són pacients que actualment estan curats, però que van aconseguir la remissió després d'haver canviat a una segona medicació. Per als efectes d'aquest estudi (que avalua només la primera pastilla), aquests casos compten com a fracàs de la línia 1.
+
+Justificació per al Modelatge (Machine Learning)
+
+La importància de redactar i classificar aquestes variables amb tant detall rau en la capacitat de l'algoritme d'aprenentatge.
+
+Si entrenéssim el model dient només que "el pacient no s'ha curat", l'algoritme intentaria buscar patrons genètics comuns entre un pacient que ha tingut resistència al tumor i un que ha tingut mal de panxa (toxicitat). Això generaria "soroll" i faria que les conclusions fossin errònies.
+
+Amb aquesta classificació detallada, podem demanar a la Intel·ligència Artificial preguntes específiques com: "Quins gens prediuen la resistència tumoral (Causa 1) independentment de l'edat del pacient?" o "Quins gens ajuden a aconseguir la remissió més ràpidament (dies fins a l'esdeveniment)?".

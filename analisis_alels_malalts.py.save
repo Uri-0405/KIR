@@ -1,0 +1,191 @@
+import pandas as pd
+import numpy as np
+import sys
+import os
+
+# ---------------------------------------------------------
+# CONFIGURACIÓ
+# ---------------------------------------------------------
+FILE_GENETIC = 'RESULTATS_T1K_NETS_TALL_3_MALALTS.xlsx'
+OUTPUT_FILE = 'RESULTATS_CLINICS_SEPARATS.xlsx'
+
+# Colors
+C_CYAN = '\033[96m'
+C_GREEN = '\033[92m'
+C_RED = '\033[91m'
+C_RESET = '\033[0m'
+
+print(f"{C_CYAN}>>> INICIANT ANÀLISI ESTRICTE (SEPARANT RMM i DMR)...{C_RESET}")
+
+# ---------------------------------------------------------
+# 1. CARREGAR DADES
+# ---------------------------------------------------------
+if not os.path.exists(FILE_CLINIC) or not os.path.exists(FILE_GENETIC):
+    print(f"{C_RED}❌ Error: Falten fitxers.{C_RESET}")
+    sys.exit()
+
+try:
+    df_clin = pd.read_excel(FILE_CLINIC, engine='openpyxl')
+    df_gen = pd.read_excel(FILE_GENETIC, engine='openpyxl')
+except Exception as e:
+    print(f"❌ Error llegint Excels: {e}")
+    sys.exit()
+
+# ---------------------------------------------------------
+# 2. NETEJA I MAPATGE DE COLUMNES
+# ---------------------------------------------------------
+def get_col(df, key):
+    for c in df.columns:
+        if key in str(c): return c
+    return None
+
+col_map = {
+    'ID': get_col(df_clin, 'ID'),
+    'START_L1': get_col(df_clin, 'INICIO ITC 1'),
+    'START_L2': get_col(df_clin, 'INICIO ITC 2'),
+    'HAS_RMM': get_col(df_clin, 'RMM ('),
+    'DATE_RMM': get_col(df_clin, 'Fecha RMM'),
+    'HAS_DMR': get_col(df_clin, 'RM profunda ('),
+    'DATE_DMR': get_col(df_clin, 'Fecha RM profunda')
+}
+
+df_c = pd.DataFrame()
+for k, v in col_map.items():
+    if v: df_c[k] = df_clin[v]
+    else: df_c[k] = np.nan # Si falta columna, omplim amb buits
+
+# Dates
+for c in ['START_L1', 'START_L2', 'DATE_RMM', 'DATE_DMR']:
+    df_c[c] = pd.to_datetime(df_c[c], dayfirst=True, errors='coerce')
+
+# IDs Match
+df_c['ID_MATCH'] = df_c['ID'].astype(str).str.strip().str.upper()
+
+# Neteja IDs Genètics
+col_mostra = df_gen.columns[0] # Assumim primera columna
+def clean_id(x):
+    txt = str(x).upper().strip()
+    parts = txt.split('-')
+    if len(parts) > 1 and parts[-1].startswith('P') and parts[-1][1:].isdigit():
+        return "-".join(parts[:-1])
+    return txt
+df_gen['ID_MATCH'] = df_gen[col_mostra].apply(clean_id)
+
+# MERGE
+df_full = pd.merge(df_c, df_gen, on='ID_MATCH', how='inner')
+print(f"   🔗 Pacients analitzats: {len(df_full)}")
+
+# ---------------------------------------------------------
+# 3. LÒGICA DE VALIDACIÓ ESTRICA (RMM i DMR)
+# ---------------------------------------------------------
+def check_remissio(row, col_has, col_date):
+    # 1. Ha arribat a remissió segons la columna booleana?
+    val = row[col_has]
+    try:
+        if int(float(val)) != 1: return 0, np.nan
+    except: return 0, np.nan
+
+    d_resp = row[col_date]
+    d_l1 = row['START_L1']
+    d_l2 = row['START_L2']
+
+    # 2. Validar dates bàsiques
+    if pd.isna(d_resp): return 0, np.nan
+    if pd.isna(d_l1): return 0, np.nan # Si no sabem quan va començar, descartem
+
+    days = (d_resp - d_l1).days
+    if days < 0: return 0, np.nan # Error: Resposta abans del tractament
+
+    # 3. VALIDACIÓ CONTRA 2a LÍNIA (La teva petició clau)
+    if pd.notna(d_l2):
+        # Si la data de remissió és POSTERIOR o IGUAL a l'inici de la 2a línia
+        if d_resp >= d_l2:
+            # Significa que ho ha aconseguit amb la 2a pastilla, no amb la 1a.
+            # Per tant, per a aquest estudi d'eficàcia de 1a línia, és un NO.
+            return 0, np.nan
+
+    return 1, days
+
+# Apliquem lògica
+df_full[['VALID_RMM', 'DAYS_RMM']] = df_full.apply(lambda x: pd.Series(check_remissio(x, 'HAS_RMM', 'DATE_RMM')), axis=1)
+df_full[['VALID_DMR', 'DAYS_DMR']] = df_full.apply(lambda x: pd.Series(check_remissio(x, 'HAS_DMR', 'DATE_DMR')), axis=1)
+
+print(f"   ✅ RMM Vàlides (Sols 1a línia): {df_full['VALID_RMM'].sum()}")
+print(f"   ✅ DMR Vàlides (Sols 1a línia): {df_full['VALID_DMR'].sum()}")
+
+# ---------------------------------------------------------
+# 4. GENERAR TAULES SEPARADES
+# ---------------------------------------------------------
+# Gens a analitzar
+cols_excloure = list(df_c.columns) + [col_mostra, 'ID_MATCH', 'VALID_RMM', 'DAYS_RMM', 'VALID_DMR', 'DAYS_DMR']
+gens = [c for c in df_gen.columns if c not in cols_excloure]
+
+list_rmm = []
+list_dmr = []
+
+total_n = len(df_full)
+
+for gen in gens:
+    # Obtenim al·lels únics
+    raw = df_full[gen].dropna().astype(str).tolist()
+    alleles = set()
+    for r in raw:
+        for p in r.split('/'):
+            if p.strip().startswith('*'): alleles.add(p.strip())
+
+    for alel in alleles:
+        mask = df_full[gen].apply(lambda x: alel in str(x))
+        df_si = df_full[mask]
+        df_no = df_full[~mask]
+        
+        n_si = len(df_si)
+        if n_si == 0: continue
+
+        freq = (n_si / total_n) * 100
+
+        # --- CÀLCULS RMM ---
+        rate_si = df_si['VALID_RMM'].mean() * 100
+        rate_no = df_no['VALID_RMM'].mean() * 100 if len(df_no)>0 else 0
+        delta = rate_si - rate_no
+        days = df_si[df_si['VALID_RMM']==1]['DAYS_RMM'].median()
+
+        list_rmm.append({
+            'GEN': gen, 'ALEL': alel, 'N_PACIENTS': n_si, 'FREQ_POBLACIO %': round(freq, 1),
+            'EXIT_RMM_PORTADORS %': round(rate_si, 1),
+            'EXIT_RMM_NO_PORTADORS %': round(rate_no, 1),
+            'DELTA_PROBABILITAT': round(delta, 1), # Diferència clau
+            'DIES_MEDIANA': days
+        })
+
+        # --- CÀLCULS DMR ---
+        rate_si = df_si['VALID_DMR'].mean() * 100
+        rate_no = df_no['VALID_DMR'].mean() * 100 if len(df_no)>0 else 0
+        delta = rate_si - rate_no
+        days = df_si[df_si['VALID_DMR']==1]['DAYS_DMR'].median()
+
+        list_dmr.append({
+            'GEN': gen, 'ALEL': alel, 'N_PACIENTS': n_si, 'FREQ_POBLACIO %': round(freq, 1),
+            'EXIT_DMR_PORTADORS %': round(rate_si, 1),
+            'EXIT_DMR_NO_PORTADORS %': round(rate_no, 1),
+            'DELTA_PROBABILITAT': round(delta, 1), # Diferència clau
+            'DIES_MEDIANA': days
+        })
+
+# ---------------------------------------------------------
+# 5. GUARDAR EN PESTANYES DIFERENTS
+# ---------------------------------------------------------
+df_res_rmm = pd.DataFrame(list_rmm).sort_values('DELTA_PROBABILITAT', ascending=False)
+df_res_dmr = pd.DataFrame(list_dmr).sort_values('DELTA_PROBABILITAT', ascending=False)
+
+try:
+    with pd.ExcelWriter(OUTPUT_FILE, engine='openpyxl') as writer:
+        df_res_rmm.to_excel(writer, sheet_name='ANALISI_RMM', index=False)
+        df_res_dmr.to_excel(writer, sheet_name='ANALISI_PROFUNDA', index=False)
+        
+    print(f"\n{C_GREEN}✅ RESULTATS GUARDATS CORRECTAMENT A: {OUTPUT_FILE}{C_RESET}")
+    print("   El fitxer conté dues pestanyes:")
+    print("   1. ANALISI_RMM (Remissió Parcial/Major)")
+    print("   2. ANALISI_PROFUNDA (Remissió Total/Profunda - La més important)")
+    
+except Exception as e:
+    print(f"{C_RED}❌ Error guardant Excel: {e}{C_RESET}")
