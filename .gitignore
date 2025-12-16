@@ -1,0 +1,12 @@
+# Dades sensibles
+*.xlsx
+*.xls
+*.csv
+!RESULTATS_OPTIMITZACIO_CUTOFFS.csv
+
+# Python
+__pycache__/
+*.pyc
+.env
+entorn/
+results_malalts/
