@@ -2,7 +2,7 @@
 
 Aquest repositori conté el flux de treball complet per al genotipatge de KIR/HLA i l'anàlisi clínica associada, utilitzant l'eina T1K.
 
-## 🚀 Guia d'Execució Pas a Pas
+## Guia d'Execució Pas a Pas
 
 ### 1. Execució del T1K ()
 Aquest script automatitza l'execució del T1K per a totes les mostres.
@@ -55,7 +55,7 @@ Scripts per generar gràfics avançats per a publicació:
 
 ---
 
-## 📂 Estructura de Carpetes
+## Estructura de Carpetes
 
 - **`fastq/`**: Fitxers de seqüenciació (input).
 - **`results/`**: Sortida bruta del T1K.
@@ -64,7 +64,7 @@ Scripts per generar gràfics avançats per a publicació:
 - **`results_sans/`**: Resultats dels controls sans.
 - **`GRAFICS_AVANCATS/`**, **`resultatsAlels/`**, **`VISUALITZACIO_FINAL_PUBLICACIO/`**: Gràfics generats.
 
-## 🛠️ Instal·lació i Compilació
+## Instal·lació i Compilació
 
 ```bash
 git clone https://github.com/pverdura/Predict2Protect.git
